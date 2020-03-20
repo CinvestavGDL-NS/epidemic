@@ -23,11 +23,14 @@ global{
 	string scenario; //short, mid and long term
 	file roads_shp <- file("../includes/gis/roads.shp");
 	
-	//virus status
+	//virus behavior related variables
 	int susceptible <- 0 update: length(people where(each.status=0));
 	int infected <- 0 update: length(people where(each.status=1));
 	int recovered <- 0 update: length(people where(each.status=2));
 	list<rgb> status_color <- [#green,#red,#blue];
+	float beta parameter: "beta" category:"SIR parameters"<- 0.5 min:0.0 max:1.0;
+	float kappa parameter: "kappa" category:"SIR parameters"<- 0.5 min:0.0 max:1.0;
+	float mu parameter: "mu" category:"SIR parameters"<- 0.1 min:0.0 max:1.0;
 	
 	//general variables
 	geometry shape <- envelope(roads_shp);
@@ -67,7 +70,7 @@ species people skills:[moving] parallel:100{
 			if near_people != nil{
 				loop contact over:near_people{
 					ask contact{
-						status <- 1;
+						if rnd(100)/100 < beta{status <- 1;}
 					}
 				}
 			}			
@@ -94,6 +97,14 @@ experiment short_term{
 		display main background:#black type:opengl{
 			species road aspect:default;
 			species people aspect:default;
+			overlay position: { 10, 10 } size: { 0.1,0.1 } background: # black border: #black rounded: true{
+                float y <- 30#px;
+               	draw ".:-0123456789" at: {0#px,0#px} color:#black font: font("SansSerif", 20, #plain);
+                draw "Infected: " +  length(people where (each.status=1)) at: { 40#px, y + 10#px } color: #white font: font("SansSerif", 15, #plain);
+               // draw "Men: " +  length(men) at: { 40#px, y + 30#px } color: #white font: font("SansSerif", 20, #plain);
+               //draw "Time: "+  current_date at:{ 40#px, y + 50#px} color:#white font:font("SansSerif",20, #plain);
+               // draw "Sunlight: "+ sunlight at:{ 40#px, y + 70#px} color:#white font:font("SansSerif",20, #plain);
+            }
 		}
 		display chart background:#black type:java2D{
 			chart "Global status" type: series x_label: "time"{
