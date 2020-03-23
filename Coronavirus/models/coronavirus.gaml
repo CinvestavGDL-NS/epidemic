@@ -29,7 +29,7 @@ global{
 	int recovered <- 0 update: length(people where(each.status=2));
 	list<rgb> status_color <- [#green,#red,#blue];
 	float beta parameter: "beta" category:"SIR parameters"<- 0.5 min:0.0 max:1.0;
-	float kappa parameter: "kappa" category:"SIR parameters"<- 0.5 min:0.0 max:1.0;
+	float kappa parameter: "kappa" category:"SIR parameters"<- 0.3 min:0.0 max:1.0;
 	float mu parameter: "mu" category:"SIR parameters"<- 0.1 min:0.0 max:1.0;
 	
 	//general variables
@@ -37,11 +37,11 @@ global{
 	graph road_network;
 	map<road, float> weight_map;
 	init{
-		step <- 60.0; 
+		step <- 1 #mn; 
 		create road from:roads_shp;
 		weight_map <- road as_map(each::each.shape.perimeter);
 		road_network <- as_edge_graph(road) with_weights weight_map;
-		create people number:1000;
+		create people number:500;
 		ask one_of(people){status<-1;}
 	}
 }
@@ -51,11 +51,13 @@ species people skills:[moving] parallel:100{
 	float speed <- 1.4;
 	//Virus
 	int status; //0:susceptible; 1:Infected; 2:Recovered
+	int time_infected; //In case of being infected
 	
 	init{
 		location <- any_location_in(one_of(road));
 		target <- any_location_in(one_of(road));
 		status <- 0; 
+		time_infected <- 0;
 	}
 	
 	reflex mobility{
@@ -65,22 +67,26 @@ species people skills:[moving] parallel:100{
 		do goto target:target on:road_network;
 	}
 	reflex virus{
-		if status = 1{
+		if status = 1{ //This agent is infected
 			list<people> near_people <- people at_distance(2);
 			if near_people != nil{
 				loop contact over:near_people{
 					ask contact{
-						if rnd(100)/100 < beta{status <- 1;}
+						if rnd(100)/100 < beta and status = 0{status <- 1;}
 					}
 				}
-			}			
+			}
+			if time_infected >= 1440{
+				if rnd(100)/100 < kappa{status <- 2;}
+			}
+			time_infected <- time_infected + 1;
 		}
 	}
 	user_command "infect"{
 		status <- 1;
 	}
 	aspect default{
-		draw circle(15) color:status_color[status];
+		draw circle(10) color:status_color[status];
 	}
 }
 species road{
@@ -99,8 +105,8 @@ experiment short_term{
 			species people aspect:default;
 			overlay position: { 10, 10 } size: { 0.1,0.1 } background: # black border: #black rounded: true{
                 float y <- 30#px;
-               	draw ".:-0123456789" at: {0#px,0#px} color:#black font: font("SansSerif", 20, #plain);
-                draw "Infected: " +  length(people where (each.status=1)) at: { 40#px, y + 10#px } color: #white font: font("SansSerif", 15, #plain);
+               draw ".:-0123456789" at: {0#px,0#px} color:#black font: font("SansSerif", 20, #plain);
+               draw "Infected: " +  length(people where (each.status=1)) at: { 40#px, y + 10#px } color: #white font: font("SansSerif", 15, #plain);
                // draw "Men: " +  length(men) at: { 40#px, y + 30#px } color: #white font: font("SansSerif", 20, #plain);
                //draw "Time: "+  current_date at:{ 40#px, y + 50#px} color:#white font:font("SansSerif",20, #plain);
                // draw "Sunlight: "+ sunlight at:{ 40#px, y + 70#px} color:#white font:font("SansSerif",20, #plain);
