@@ -1,6 +1,6 @@
 /***
 * Name: coronavirus
-* Author: Gamaliel Palomo
+* Author: Gamaliel Palomo and Mario Siller
 * Description: Modelo que permite conocer el impacto de la cultura, educación, forma de vida de la población en méxico en el patrón de dispersión del vírus.
 * El modelo considera agentes que son personas, estas personas tienen comportamientos que se rigen dependiendo de ciertas variables como el nivel socio-economico. 
 * Las personas con una alta necesidad de realizar actividades económicas se verán más motivadas a salir de casa en el caso de una emergencia epidemiológica.
@@ -11,12 +11,13 @@
 * El modelo puede simular tres escenarios de tiempo: corto, mediano y largo plazo donde se expone el comprotamiento de la enfermedad en la rutina de las 
 * personas diariamente. Mediano plazo considera una semana con una escala de espacio mayor. Largo plazo simula el comportamiento de la
 * ciudad y de sus servicios y actividad económica en un lapso de un mes.
-* Tags: Tag1, Tag2, TagN
+* This model is based mostly in the following papers:
+* [Tang et. al.] Estimation of the transmission risk of 2019-nCov and its implication for public healt interventions.
+* [Alcaraz and De-Leon] Modeling control strategies for influenza A H1N1 epidemics: SIR models.
+* Tags: Epidemics, coronavirus, México.
 ***/
 
 model coronavirus
-
-/* Insert your model definition here */
 
 global{
 	//scenario
@@ -27,7 +28,8 @@ global{
 	int susceptible <- 0 update: length(people where(each.status=0));
 	int infected <- 0 update: length(people where(each.status=1));
 	int recovered <- 0 update: length(people where(each.status=2));
-	list<rgb> status_color <- [#green,#red,#blue];
+	//0:Susceptible; 1:Exposed; 2:Infectious not yet symptomatic (pre or Asymptomatic); 3:Infectious with symptoms; 4:Hospitalized; 5:Recovered; 6:Isolated.
+	list<rgb> status_color <- [#yellow,#orange,#gamared,#red,#blue,#green,#darkturquoise];
 	float beta parameter: "beta" category:"SIR parameters"<- 0.5 min:0.0 max:1.0;
 	float kappa parameter: "kappa" category:"SIR parameters"<- 0.3 min:0.0 max:1.0;
 	float mu parameter: "mu" category:"SIR parameters"<- 0.1 min:0.0 max:1.0;
@@ -42,7 +44,7 @@ global{
 		weight_map <- road as_map(each::each.shape.perimeter);
 		road_network <- as_edge_graph(road) with_weights weight_map;
 		create people number:500;
-		ask one_of(people){status<-1;}
+		ask one_of(people){status<-2;}
 	}
 }
 species people skills:[moving] parallel:100{
@@ -50,14 +52,16 @@ species people skills:[moving] parallel:100{
 	point target;
 	float speed <- 1.4;
 	//Virus
-	int status; //0:susceptible; 1:Infected; 2:Recovered
+	int status; //0:Susceptible; 1:Exposed; 2:Infectious not yet symptomatic (pre or Asymptomatic); 3:Infectious with symptoms; 4:Hospitalized; 5:Recovered; 6:Isolated.
 	int time_infected; //In case of being infected
+	bool symptoms;
 	
 	init{
 		location <- any_location_in(one_of(road));
 		target <- any_location_in(one_of(road));
 		status <- 0; 
 		time_infected <- 0;
+		symptoms <- false;
 	}
 	
 	reflex mobility{
@@ -67,7 +71,7 @@ species people skills:[moving] parallel:100{
 		do goto target:target on:road_network;
 	}
 	reflex virus{
-		if status = 1{ //This agent is infected
+		if status = 1{ //This agent is infectous and asymptomatic
 			list<people> near_people <- people at_distance(2);
 			if near_people != nil{
 				loop contact over:near_people{
@@ -83,7 +87,7 @@ species people skills:[moving] parallel:100{
 		}
 	}
 	user_command "infect"{
-		status <- 1;
+		status <- 3;
 	}
 	aspect default{
 		draw circle(10) color:status_color[status];
