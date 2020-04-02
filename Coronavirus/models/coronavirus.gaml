@@ -25,16 +25,24 @@ global{
 	file roads_shp <- file("../includes/gis/roads.shp");
 	
 	//virus behavior related variables
-	int susceptible <- 0 update: length(people where(each.status=0));
-	int infected <- 0 update: length(people where(each.status=1));
-	int recovered <- 0 update: length(people where(each.status=2));
+	
 	//0:Susceptible; 1:Exposed; 2:Infectious not yet symptomatic (pre or Asymptomatic); 3:Infectious with symptoms; 4:Hospitalized; 5:Recovered; 6:Isolated.
 	list<rgb> status_color <- [#yellow,#orange,#gamared,#red,#blue,#green,#darkturquoise];
+	list<int> status_size <- [5,6,7,8,9,10,11];
 	float beta parameter: "beta" category:"SIR parameters"<- 0.5 min:0.0 max:1.0;
 	float kappa parameter: "kappa" category:"SIR parameters"<- 0.3 min:0.0 max:1.0;
 	float mu parameter: "mu" category:"SIR parameters"<- 0.1 min:0.0 max:1.0;
 	
-	//general variables
+	//Output variables
+	int nb_susceptible <- 0 update: length(people where(each.status=0));
+	int nb_exposed <- 0 update: length(people where(each.status=1));
+	int nb_infectious_asymptomatic <- 0 update: length(people where(each.status=2));
+	int nb_infectious_symptomatic <- 0 update: length(people where(each.status=3));
+	int nb_hospitalized <- 0 update: length(people where(each.status=4));
+	int nb_recovered <- 0 update: length(people where(each.status=5));
+	int nb_isolated <- 0 update: length(people where(each.status=6));
+	
+	//General model parameters
 	geometry shape <- envelope(roads_shp);
 	graph road_network;
 	map<road, float> weight_map;
@@ -71,7 +79,7 @@ species people skills:[moving] parallel:100{
 		do goto target:target on:road_network;
 	}
 	reflex virus{
-		if status = 1{ //This agent is infectous and asymptomatic
+		if status = 2{ //This agent is infectous and asymptomatic
 			list<people> near_people <- people at_distance(2);
 			if near_people != nil{
 				loop contact over:near_people{
@@ -90,7 +98,7 @@ species people skills:[moving] parallel:100{
 		status <- 3;
 	}
 	aspect default{
-		draw circle(10) color:status_color[status];
+		draw sphere(status_size[status]) color:status_color[status];
 	}
 }
 species road{
@@ -107,20 +115,25 @@ experiment short_term{
 		display main background:#black type:opengl{
 			species road aspect:default;
 			species people aspect:default;
-			overlay position: { 10, 10 } size: { 0.1,0.1 } background: # black border: #black rounded: true{
+			/*overlay position: { 10, 10 } size: { 0.1,0.1 } background: # black border: #black rounded: true{
                 float y <- 30#px;
-               draw ".:-0123456789" at: {0#px,0#px} color:#black font: font("SansSerif", 20, #plain);
+               draw ".:0123456789" at: {0#px,0#px} color:#white font: font("SansSerif", 20, #plain);
                draw "Infected: " +  length(people where (each.status=1)) at: { 40#px, y + 10#px } color: #white font: font("SansSerif", 15, #plain);
                // draw "Men: " +  length(men) at: { 40#px, y + 30#px } color: #white font: font("SansSerif", 20, #plain);
                //draw "Time: "+  current_date at:{ 40#px, y + 50#px} color:#white font:font("SansSerif",20, #plain);
                // draw "Sunlight: "+ sunlight at:{ 40#px, y + 70#px} color:#white font:font("SansSerif",20, #plain);
-            }
+            }*/
 		}
 		display chart background:#black type:java2D{
 			chart "Global status" type: series x_label: "time"{
-				data "Susceptible" value: susceptible color: status_color[0] marker: false style: line;
-				data "Infected" value: infected color: status_color[1] marker: false style: line;
-				data "Recovered" value: recovered color: status_color[2] marker: false style: line;
+				//0:Susceptible; 1:Exposed; 2:Infectious not yet symptomatic (pre or Asymptomatic); 3:Infectious with symptoms; 4:Hospitalized; 5:Recovered; 6:Isolated
+				data "Susceptible" value: nb_susceptible color: status_color[0] marker: false style: line;
+				data "Exposed" value: nb_exposed color: status_color[1] marker: false style: line;
+				data "Infectious Asymptomatic" value: nb_infectious_asymptomatic color: status_color[2] marker: false style: line;
+				data "Infectious Symptomatic" value: nb_infectious_symptomatic color: status_color[3] marker: false style: line;
+				data "Hospitalized" value: nb_hospitalized color: status_color[4] marker: false style: line;
+				data "Recovered" value: nb_recovered color: status_color[5] marker: false style: line;
+				data "Isolated" value: nb_isolated color: status_color[6] marker: false style: line;
 			}
 		}
 	}
