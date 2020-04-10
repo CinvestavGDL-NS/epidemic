@@ -4,14 +4,16 @@
 * Description: Modelo que permite conocer el impacto de la cultura, educación, forma de vida de la población en méxico en el patrón de dispersión del vírus.
 * El modelo considera agentes que son personas, estas personas tienen comportamientos que se rigen dependiendo de ciertas variables como el nivel socio-economico. 
 * Las personas con una alta necesidad de realizar actividades económicas se verán más motivadas a salir de casa en el caso de una emergencia epidemiológica.
-* Las personas tienen diversos estados relacionados con el vírus: Suceptible, Infectado y Recuperado, basado en el bien conocido modelo SIR.
 * El modelo calcula las probabilidades de transición de estado de los agentes de manera individual y general, teniendo la ventaja de ser valores dinámicos con lo que 
 * pueden hacerse estimaciones más cercanas a la realidad.
 * La base de la transmisión del virus es el contacto, contacto directo entre una persona infectada y una susceptible.
 * El modelo puede simular tres escenarios de tiempo: corto, mediano y largo plazo donde se expone el comprotamiento de la enfermedad en la rutina de las 
 * personas diariamente. Mediano plazo considera una semana con una escala de espacio mayor. Largo plazo simula el comportamiento de la
 * ciudad y de sus servicios y actividad económica en un lapso de un mes.
-* This model is based mostly in the following papers:
+* The system status according to the model are: 
+* Susceptible (S), Exposed (E), Infectious not yet symptomatic (pre or Asymptomatic) (Ia), Infectious with symptoms (Is), Hospitalized (H), Recovered (R), Isolated (Q).
+* 
+* The model is based mostly in the following papers:
 * [Tang et. al.] Estimation of the transmission risk of 2019-nCov and its implication for public healt interventions.
 * [Alcaraz and De-Leon] Modeling control strategies for influenza A H1N1 epidemics: SIR models.
 * [World Healt Organization] Q&A on coronaviruses (COVID-19) https://www.who.int/news-room/q-a-detail/q-a-coronaviruses.
@@ -24,16 +26,19 @@ global{
 	//scenario
 	string scenario parameter: "scenario" category:"Model parameters" <- "small" among:["small","large"]; //small or large scenario
 	file roads_shp <- file("../includes/gis/"+scenario+"_roads.shp");
+	int timeElapsed <- 0 update: int(cycle*5#mn);
 	
 	//General virus behavior related parameters and variables
-	int init_nb_exposed parameter:"init_nb_exposed" category:"Model parameters" <- 10 min:0 max:100; //Number of agents initially exposed to the virus.
+	int init_nb_exposed parameter:"init_nb_exposed" category:"Model parameters" <- 10 min:0 max:100; //Number of agents initially exposed to the virus S.
 	float alpha parameter: "alpha" category:"Model parameters" <- 0.05 min:0.0 max:1.0; //Disease-related death rate of infectious individuals.
-	float beta parameter: "beta" category:"Model parameters" <- 0.25 min:0.0 max:1.0; //Transmission probability of susceptible individuals.
-	float gamma parameter: "gamma" category:"Model parameters" <- 0.1 min:0.0 max:1.0; //Rate of isolation of susceptible individuals.
+	float beta parameter: "beta" category:"Model parameters" <- 0.25 min:0.0 max:1.0; //Transmission probability of susceptible individuals S->Is or S->Ia.
+	float gamma parameter: "gamma" category:"Model parameters" <- 0.1 min:0.0 max:1.0; //Rate of isolation of susceptible individuals S->Qs.
 	float delta parameter: "delta" category:"Model parameters" <- 0.1 min:0.0 max:1.0; //Rate at which return to susceptible class S from class Qs.
-	float delta_I parameter: "delta_I" category:"Model parameters" <- 0.13266 min:0.0 max:1.0; //Transition rate of symptomatic infected individuals to the quarantined infected class.
-	float kappa parameter: "kappa" category:"Model parameters" <- 0.3 min:0.0 max:1.0; //Rate constant for recover.
-	float mu parameter: "mu" category:"Model parameters"<- 0.1 min:0.0 max:1.0; //Per capita natural mortality rate.
+	float delta_I parameter: "delta_I" category:"Model parameters" <- 0.13266 min:0.0 max:1.0; //Transition rate of symptomatic infected individuals to the quarantined infected class I->Qs.
+	float kappa_Is parameter: "kappa" category:"Model parameters" <- 0.3 min:0.0 max:1.0; //Rate constant for recover of infectious symptomatic.
+	float kappa_Ia parameter: "kappa" category:"Model parameters" <- 0.3 min:0.0 max:1.0; //Rate constant for recover of infectious asymptomatic.
+	float kappa_Ih parameter: "kappa" category:"Model parameters" <- 0.3 min:0.0 max:1.0; //Rate constant for recover of infectious hospitalized.
+	float mu parameter: "mu" category:"Model parameters"<- 0.1 min:0.0 max:1.0; //Per capita natural mortality rate for causes other than disease-related.
 	float rho parameter: "rho" category:"Model parameters" <- 0.86834 min:0.0 max:1.0; //Probability of having symptoms among infected individuals.
 	float sigma parameter: "sigma" category:"Model parameters" <- 1/7 min:0.0 max:1.0; //Transition rate of exposed individuals to the infected class.
 	
@@ -95,7 +100,7 @@ species people skills:[moving] parallel:100{
 		}
 		//This agent is infectous and asymptomatic
 		if status = 2 { 
-			list<people> near_people <- people at_distance(2);
+			list<people> near_people <- people at_distance(2);//To do: as a parameter 
 			if near_people != nil{
 				loop contact over:near_people{
 					ask contact{
@@ -107,7 +112,7 @@ species people skills:[moving] parallel:100{
 			if rnd(100)/100 < delta_I{status <- 6;} //Infected goes to isolation.
 		}
 		//This agent is infectous and shows symptoms
-		//It depends on the profile of agent if it goes to a hospital, goes to isolate at home.
+		//It depends on the profile of agent if it goes to a hospital or it isolates at home.
 		if status = 3{
 			list<people> near_people <- people at_distance(2);
 			if near_people != nil{
@@ -121,7 +126,7 @@ species people skills:[moving] parallel:100{
 			if rnd(100)/100 < delta_I{status <- 6;} //Infected goes to isolation.
 		}
 		if status = 4{
-			
+		//Agent has been infected with virus, showing symptoms and required hospitalization.
 		}
 		if status = 5{
 			
@@ -152,7 +157,10 @@ experiment simulation{
             }*/
 		}
 		display chart background:#black type:java2D refresh:every(1#hour){
-			chart "Global status" type: series x_label: "time" style:ring background:#black color:#white label_font:"Arial" x_tick_unit:step memorize:false{
+			overlay size: { 180 #px, 100 #px } {
+				draw ""+int(timeElapsed/3600)+" hours" at:{350#px,30#px} color:#white font: font("Arial", 20,#plain);
+			}
+			chart "Global status" type: series x_label: "Time" y_label:"People" style:ring background:#black color:#white label_font:"Arial" x_tick_unit:step memorize:false label_font_size:15 legend_font_size:15 title_font:"Arial" title_font_size:16 title_visible:false{
 				//0:Susceptible; 1:Exposed; 2:Infectious not yet symptomatic (pre or Asymptomatic); 3:Infectious with symptoms; 4:Hospitalized; 5:Recovered; 6:Isolated
 				data "Susceptible" value: nb_susceptible color: status_color[0] marker: false style: line;
 				data "Exposed" value: nb_exposed color: status_color[1] marker: false style: line;
