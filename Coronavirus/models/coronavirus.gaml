@@ -30,20 +30,26 @@ global{
 	
 	//General virus behavior related parameters and variables
 	int init_nb_exposed parameter:"init_nb_exposed" category:"Model parameters" <- 10 min:0 max:100; //Number of agents initially exposed to the virus S.
-	float alpha parameter: "alpha" category:"Model parameters" <- 0.05 min:0.0 max:1.0; //Disease-related death rate of infectious individuals.
-	float beta parameter: "beta" category:"Model parameters" <- 0.25 min:0.0 max:1.0; //Transmission probability of susceptible individuals S->Is or S->Ia.
-	float gamma parameter: "gamma" category:"Model parameters" <- 0.1 min:0.0 max:1.0; //Rate of isolation of susceptible individuals S->Qs.
-	float delta parameter: "delta" category:"Model parameters" <- 0.1 min:0.0 max:1.0; //Rate at which return to susceptible class S from class Qs.
-	float delta_I parameter: "delta_I" category:"Model parameters" <- 0.13266 min:0.0 max:1.0; //Transition rate of symptomatic infected individuals to the quarantined infected class I->Qs.
-	float kappa_Is parameter: "kappa" category:"Model parameters" <- 0.3 min:0.0 max:1.0; //Rate constant for recover of infectious symptomatic.
-	float kappa_Ia parameter: "kappa" category:"Model parameters" <- 0.3 min:0.0 max:1.0; //Rate constant for recover of infectious asymptomatic.
-	float kappa_Ih parameter: "kappa" category:"Model parameters" <- 0.3 min:0.0 max:1.0; //Rate constant for recover of infectious hospitalized.
+	float alpha parameter: "alpha" category:"Model parameters" <- 0.05 min:0.0 max:1.0; //Probability of going from Exposed to Susceptible.
+	float beta parameter: "beta" category:"Model parameters" <- 0.25 min:0.0 max:1.0; //Probability of going from Susceptible to Exposed.
+	float rho parameter: "rho" category:"Model parameters" <- 0.86834 min:0.0 max:1.0; //Probability of having symptoms among infected individuals E->Is.
+	float sigma parameter: "sigma" category:"Model parameters" <- 1/7 min:0.0 max:1.0; //Probability of not having symptoms among infected individiuals E->Ia.
+	float delta_Is parameter: "delta_Is" category:"Model parameters" <- 0.13266 min:0.0 max:1.0; //Probability of going from symptomatic infected individuals to the quarantined infected class I->Q_Is.
+	float delta_Ia parameter: "delta_Ia" category:"Model parameters" <- 0.13266 min:0.0 max:1.0; //Probability of going from asymptomatic infected individuals to the quarantined infected class I->Q_Ia.
+	float gamma parameter: "gamma" category:"Model parameters" <- 0.1 min:0.0 max:1.0; //Probability of being symptomatic and being then hospitalized.
+	float delta parameter: "delta" category:"Model parameters" <- 0.1 min:0.0 max:1.0; //Probability of return to susceptible class S once Recovered.
+	float kappa_QIs parameter: "kappa_QIs" category:"Model parameters" <- 0.3 min:0.0 max:1.0; //Probability of recovery after being Infectious symptomatic and in isolation.
+	float kappa_Is parameter: "kappa_Is" category:"Model parameters" <- 0.3 min:0.0 max:1.0; //Probability of recovery after being Infectious symptomatic.
+	float kappa_Ia parameter: "kappa_Ia" category:"Model parameters" <- 0.3 min:0.0 max:1.0; //Probability of recovery after being Infectious asymptomatic.
+	float kappa_H parameter: "kappa_H" category:"Model parameters" <- 0.3 min:0.0 max:1.0; //Probability of recovery after being Hospitalized.
+	float kappa_QIa parameter: "kappa_QIa" category:"Model parameters" <- 0.3 min:0.0 max:1.0; //Probability of recovery after being Infectious asymptomatic.
 	float mu parameter: "mu" category:"Model parameters"<- 0.1 min:0.0 max:1.0; //Per capita natural mortality rate for causes other than disease-related.
-	float rho parameter: "rho" category:"Model parameters" <- 0.86834 min:0.0 max:1.0; //Probability of having symptoms among infected individuals.
-	float sigma parameter: "sigma" category:"Model parameters" <- 1/7 min:0.0 max:1.0; //Transition rate of exposed individuals to the infected class.
+	
 	
 	//Visualization parameters
-	list<rgb> status_color <- [#yellow,#darkturquoise,#indigo,#red,#blue,#green,#gray];
+	//0.Susceptible (S), 1.Exposed (E), 2.Infectious with symptoms (Is), 3.Infectious with symptoms and Isolated (Q_Is), 
+	//4.Infectious asymptomatic (Ia), 5.Infectious asymptomatic and Isolated(Q_Ia), 6.Hospitalized (H), 7.Recovered (R), 8.Death(D).
+	list<rgb> status_color <- [#yellow,#darkturquoise,#red,#magenta,#indigo,#sienna, #skyblue,#green,#gray];
 	list<int> status_size <- scenario="small"?[5,6,7,8,9,10,11]:[10,12,14,16,18,20,22];
 	
 	//Output variables
@@ -73,7 +79,9 @@ species people skills:[moving] parallel:100{
 	point target;
 	float speed <- 1.4;
 	//Virus
-	int status; //0:Susceptible; 1:Exposed; 2:Infectious not yet symptomatic (pre or Asymptomatic); 3:Infectious with symptoms; 4:Hospitalized; 5:Recovered; 6:Isolated.
+	//0.Susceptible (S), 1.Exposed (E), 2.Infectious with symptoms (Is), 3.Infectious with symptoms and Isolated (Q_Is), 
+	//4.Infectious asymptomatic (Ia), 5.Infectious asymptomatic and Isolated(Q_Ia), 6.Hospitalized (H), 7.Recovered (R), 8.Death(D).
+	int status;
 	float time_exposed; //In case of being exposed to an infected contact.
 	float incubation_period; //The “incubation period” means the time between catching the virus and beginning to have symptoms of the disease. Most estimates of the incubation period for COVID-19 range from 1-14 days, most commonly around five days. [WHO: The “incubation period” means the time between catching the virus and beginning to have symptoms of the disease. Most estimates of the incubation period for COVID-19 range from 1-14 days, most commonly around five days.]
 	
@@ -90,6 +98,8 @@ species people skills:[moving] parallel:100{
 		if scenario = "small" and status != 6 {do goto target:target on:road_network;} else if status != 6 {do goto target:target;}
 	}
 	reflex virus{
+		//0.Susceptible (S), 1.Exposed (E), 2.Infectious with symptoms (Is), 3.Infectious with symptoms and Isolated (Q_Is), 
+		//4.Infectious asymptomatic (Ia), 5.Infectious asymptomatic and Isolated(Q_Ia), 6.Hospitalized (H), 7.Recovered (R), 8.Death(D).
 		//This agent has been exposed to the virus
 		if status = 1{
 			time_exposed <- time_exposed + 1;
@@ -98,7 +108,7 @@ species people skills:[moving] parallel:100{
 				status <- rnd(100)/100 < rho?3:2;//Likelihoood of rho of becoming Infectious with symptoms and (1-rho) of being asymptomatic.
 			}
 		}
-		//This agent is infectous and asymptomatic
+		//This agent is infectous showing symptoms
 		if status = 2 { 
 			list<people> near_people <- people at_distance(2);//To do: as a parameter 
 			if near_people != nil{
@@ -109,10 +119,9 @@ species people skills:[moving] parallel:100{
 				}
 			}
 			incubation_period <- incubation_period + step;
-			if rnd(100)/100 < delta_I{status <- 6;} //Infected goes to isolation.
+			if rnd(100)/100 < delta_Is{status <- 6;} //Infected goes to isolation.
 		}
-		//This agent is infectous and shows symptoms
-		//It depends on the profile of agent if it goes to a hospital or it isolates at home.
+		//This agent is infectous asymptomatic
 		if status = 3{
 			list<people> near_people <- people at_distance(2);
 			if near_people != nil{
@@ -123,7 +132,7 @@ species people skills:[moving] parallel:100{
 				}
 			}
 			incubation_period <- incubation_period + step;
-			if rnd(100)/100 < delta_I{status <- 6;} //Infected goes to isolation.
+			if rnd(100)/100 < delta_Is{status <- 6;} //Infected goes to isolation.
 		}
 		if status = 4{
 		//Agent has been infected with virus, showing symptoms and required hospitalization.
