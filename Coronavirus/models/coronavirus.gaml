@@ -122,7 +122,7 @@ species people skills:[moving] parallel:100{
 		//Infectious with symptoms and Isolated (Q_Is)
 		if status = 3{
 			if ((cycle-time_of_change)*step/86400)>15{
-				
+				if rnd(100)/100<kappa_QIs{status <- 7;time_of_change <- cycle;}
 			}
 		}
 		
