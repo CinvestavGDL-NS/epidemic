@@ -49,17 +49,19 @@ global{
 	//Visualization parameters
 	//0.Susceptible (S), 1.Exposed (E), 2.Infectious with symptoms (Is), 3.Infectious with symptoms and Isolated (Q_Is), 
 	//4.Infectious asymptomatic (Ia), 5.Infectious asymptomatic and Isolated(Q_Ia), 6.Hospitalized (H), 7.Recovered (R), 8.Death(D).
-	list<rgb> status_color <- [#yellow,#darkturquoise,#red,#magenta,#indigo,#sienna, #skyblue,#green,#gray];
-	list<int> status_size <- scenario="small"?[5,6,7,8,9,10,11]:[10,12,14,16,18,20,22];
+	list<rgb> status_color <- [#yellow,#darkturquoise,#red,#magenta,#gamaorange,#sienna, #skyblue,#green,#gray];
+	list<int> status_size <- scenario="small"?[5,6,7,8,9,10,11,13]:[10,12,14,16,18,20,25];
 	
 	//Output variables
 	int nb_susceptible <- 0 update: length(people where(each.status=0));
 	int nb_exposed <- 0 update: length(people where(each.status=1));
-	int nb_infectious_asymptomatic <- 0 update: length(people where(each.status=2));
-	int nb_infectious_symptomatic <- 0 update: length(people where(each.status=3));
-	int nb_hospitalized <- 0 update: length(people where(each.status=4));
-	int nb_recovered <- 0 update: length(people where(each.status=5));
-	int nb_isolated <- 0 update: length(people where(each.status=6));
+	int nb_infectious_symptomatic <- 0 update: length(people where(each.status=2));
+	int nb_Q_Is <- 0 update: length(people where(each.status=3));
+	int nb_infectious_asymptomatic <- 0 update: length(people where(each.status=4));
+	int nb_Q_Ia <- 0 update: length(people where(each.status=5));
+	int nb_hospitalized <- 0 update: length(people where(each.status=6));
+	int nb_recovered <- 0 update: length(people where(each.status=7));
+	int nb_isolated <- 0 update: length(people where(each.status=8));
 	
 	//General model parameters
 	geometry shape <- envelope(roads_shp);
@@ -71,7 +73,7 @@ global{
 		weight_map <- road as_map(each::each.shape.perimeter);
 		road_network <- as_edge_graph(road) with_weights weight_map;
 		create people number:scenario="small"?500-init_nb_exposed:1000-init_nb_exposed;
-		create people number:init_nb_exposed{status<-1;}
+		create people number:init_nb_exposed{status<-1; time_of_change <- cycle;}
 	}
 }
 species people skills:[moving] parallel:100{
@@ -82,7 +84,7 @@ species people skills:[moving] parallel:100{
 	//0.Susceptible (S), 1.Exposed (E), 2.Infectious with symptoms (Is), 3.Infectious with symptoms and Isolated (Q_Is), 
 	//4.Infectious asymptomatic (Ia), 5.Infectious asymptomatic and Isolated(Q_Ia), 6.Hospitalized (H), 7.Recovered (R), 8.Death(D).
 	int status;
-	float time_exposed; //In case of being exposed to an infected contact.
+	int time_of_change <- 0; //Time of last status change.
 	float incubation_period; //The “incubation period” means the time between catching the virus and beginning to have symptoms of the disease. Most estimates of the incubation period for COVID-19 range from 1-14 days, most commonly around five days. [WHO: The “incubation period” means the time between catching the virus and beginning to have symptoms of the disease. Most estimates of the incubation period for COVID-19 range from 1-14 days, most commonly around five days.]
 	
 	init{
@@ -95,53 +97,68 @@ species people skills:[moving] parallel:100{
 		if target = location{
 			target<-any_location_in(world);
 		}
-		if scenario = "small" and status != 6 {do goto target:target on:road_network;} else if status != 6 {do goto target:target;}
+		if scenario = "small" and status != 3 and status != 6 and status != 5{do goto target:target on:road_network;}
 	}
 	reflex virus{
 		//0.Susceptible (S), 1.Exposed (E), 2.Infectious with symptoms (Is), 3.Infectious with symptoms and Isolated (Q_Is), 
 		//4.Infectious asymptomatic (Ia), 5.Infectious asymptomatic and Isolated(Q_Ia), 6.Hospitalized (H), 7.Recovered (R), 8.Death(D).
-		//This agent has been exposed to the virus
+		
+		//Exposed (E)
 		if status = 1{
-			time_exposed <- time_exposed + 1;
-			if rnd(100)/100 < sigma{
-				//Exposed agent becomes infected.
-				status <- rnd(100)/100 < rho?3:2;//Likelihoood of rho of becoming Infectious with symptoms and (1-rho) of being asymptomatic.
+			do infect;
+			if ((cycle-time_of_change)*step/86400)>2{//86400 seconds in a day
+				status <- rnd(100)/100 < rho?2:4;//Likelihoood of rho of becoming Infectious with symptoms and (1-rho) of being asymptomatic.
+				time_of_change <- cycle;	
 			}
 		}
-		//This agent is infectous showing symptoms
-		if status = 2 { 
-			list<people> near_people <- people at_distance(2);//To do: as a parameter 
-			if near_people != nil{
-				loop contact over:near_people{
-					ask contact{
-						if rnd(100)/100 < beta and status = 0{status <- 1;time_exposed <- 0#hour;}
-					}
-				}
+		
+		//Infectious symptomatic (Is)
+		if status = 2 {
+			do infect;
+			if ((cycle-time_of_change)*step/86400)>1{
+				status <- rnd(100)/100<delta_Is? 3:6;time_of_change <- cycle; //Goes to isolation.
 			}
-			incubation_period <- incubation_period + step;
-			if rnd(100)/100 < delta_Is{status <- 6;} //Infected goes to isolation.
 		}
-		//This agent is infectous asymptomatic
+		//Infectious with symptoms and Isolated (Q_Is)
 		if status = 3{
+			if ((cycle-time_of_change)*step/86400)>15{
+				
+			}
+		}
+		
+		//Infectious asymptomatic (Ia)
+		if status = 4{
 			list<people> near_people <- people at_distance(2);
 			if near_people != nil{
 				loop contact over:near_people{
 					ask contact{
-						if rnd(100)/100 < beta and status = 0{status <- 1;time_exposed <- 0#hour;}
+						if rnd(100)/100 < beta and status = 0{status <- 1;time_of_change <- cycle;}
 					}
 				}
 			}
 			incubation_period <- incubation_period + step;
-			if rnd(100)/100 < delta_Is{status <- 6;} //Infected goes to isolation.
-		}
-		if status = 4{
-		//Agent has been infected with virus, showing symptoms and required hospitalization.
 		}
 		if status = 5{
-			
+		//Agent has been infected with virus, showing symptoms and required hospitalization.
 		}
 		if status = 6{
 			
+		}
+		if status = 7{
+			
+		}
+		if status = 8{
+			
+		}
+	}
+	action infect{
+		list<people> near_people <- people at_distance(2);//To do: as a parameter
+		if near_people != nil{
+			loop contact over:near_people{
+				ask contact{
+					if rnd(100)/100 < beta and status = 0{status <- 1;time_of_change <- cycle;}
+				}
+			}
 		}
 	}
 	user_command "infect"{status <- 3;}
@@ -154,6 +171,7 @@ experiment simulation{
 	output{
 		layout #split;
 		display main background:#black type:opengl{
+			//image "background" file:"../includes/img/img_file.jpg";
 			species road aspect:default;
 			species people aspect:default;
 			/*overlay position: { 10, 10 } size: { 0.1,0.1 } background: # black border: #black rounded: true{
@@ -169,15 +187,16 @@ experiment simulation{
 			overlay size: { 180 #px, 100 #px } {
 				draw ""+int(timeElapsed/3600)+" hours" at:{350#px,30#px} color:#white font: font("Arial", 20,#plain);
 			}
-			chart "Global status" type: series x_label: "Time" y_label:"People" style:ring background:#black color:#white label_font:"Arial" x_tick_unit:step memorize:false label_font_size:15 legend_font_size:15 title_font:"Arial" title_font_size:16 title_visible:false{
+			chart "Global status" type: series x_label: "Time" y_label:"People" style:ring background:#black color:#white label_font:"Arial" x_tick_unit:(step*cycle)/3600 memorize:false label_font_size:15 legend_font_size:15 title_font:"Arial" title_font_size:16 title_visible:false{
 				//0:Susceptible; 1:Exposed; 2:Infectious not yet symptomatic (pre or Asymptomatic); 3:Infectious with symptoms; 4:Hospitalized; 5:Recovered; 6:Isolated
 				data "Susceptible" value: nb_susceptible color: status_color[0] marker: false style: line;
 				data "Exposed" value: nb_exposed color: status_color[1] marker: false style: line;
-				data "Infectious Asymptomatic" value: nb_infectious_asymptomatic color: status_color[2] marker: false style: line;
-				data "Infectious Symptomatic" value: nb_infectious_symptomatic color: status_color[3] marker: false style: line;
-				data "Hospitalized" value: nb_hospitalized color: status_color[4] marker: false style: line;
-				data "Recovered" value: nb_recovered color: status_color[5] marker: false style: line;
-				data "Isolated" value: nb_isolated color: status_color[6] marker: false style: line;
+				data "Infectious Symptomatic" value: nb_infectious_symptomatic color: status_color[2] marker: false style: line;
+				data "Q_Is" value: nb_Q_Is color: status_color[3] marker: false style: line;
+				data "Infectious Asymptomatic" value: nb_infectious_asymptomatic color: status_color[4] marker: false style: line;
+				data "Q_Ia" value: nb_Q_Ia color: status_color[5] marker: false style: line;
+				data "Hospitalized" value: nb_hospitalized color: status_color[6] marker: false style: line;
+				data "Recovered" value: nb_recovered color: status_color[7] marker: false style: line;
 			}
 		}
 	}
