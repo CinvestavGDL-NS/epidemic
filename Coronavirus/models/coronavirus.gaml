@@ -47,7 +47,7 @@ global{
 	map<string,int> status_size <- ["S"::5,"E"::5,"Is"::5,"Ia"::5,"R"::5,"I"::5, "D"::5];
 	map<string,rgb> status_color <- ["S"::#yellow,"E"::#gamaorange,"Is"::#red,"Ia"::#magenta,"R"::#greenyellow,"I"::#white, "D"::rgb (179, 0, 0,255), "Qs"::#red, "Qa"::#blueviolet,"H"::#skyblue ];
 	
-	int nb_people <- 1500;
+	int nb_people <- 500;
 	
 	//Output variables
 	int nb_susceptible <- nb_people-init_nb_exposed update: length(people where(each.epidemic_status="S"));
@@ -74,7 +74,7 @@ global{
 	map<road, float> weight_map;
 	init{
 		starting_date <- date("2020-02-28 00:00:00") ;
-		step <- 2#mn; 
+		step <- 3#mn; 
 		create road from:roads_shp;
 		create block from:blocks_shp;
 		create hospital{beds<- 30;intensive_care_beds<-10;}
@@ -216,6 +216,7 @@ species people skills:[escape_pedestrian] parallel:500{
 	}
 	
 	reflex update_activity when:not empty(agenda_day) and (after(agenda_day.keys[0])){
+		do update_beliefs;
 		target <- agenda_day.values[0];
 		agenda_day>>first(agenda_day);
 		if Qa or Qs{
@@ -244,24 +245,25 @@ species people skills:[escape_pedestrian] parallel:500{
 		if cultural_orientation = "horizontal_individualist"{result <- result + 0.17;}
 		if cultural_orientation = "vertical_collectivist"{result <- result + 0.33;}
 		if cultural_orientation = "horizontal_collectivist"{result <- result + 0.5;}
-		if !f and b{result <- 1-result;}
-		return result;
+		result <- 1.0;
+		if (!f and b) or (f and !b){result <- 1-result;}
+		return 1-result;
 	}
 	
 	float incoming_information{
 		float result <- 0.0;
-		result <- nb_infectious_symptomatic / length(people);
-		return 1-result;
+		result <- nb_exposed+nb_infectious_symptomatic+nb_infectious_asymptomatic+nb_D+nb_H+nb_Qs+nb_Qa / length(people);
+		return result;
 	}
 	
 	action update_beliefs{
-		write "update_beliefs("+name+")";
+		//write "update_beliefs("+name+")";
 		loop i from: 0 to:2{
 			float numerator1 <- likelihood(true,true)*beliefs[i];
 			float denominator1 <- likelihood(true,true)*beliefs[i] + likelihood(true,false)*(1-beliefs[i]);
 			float numerator2 <- likelihood(false,true)*beliefs[i];
 			float denominator2 <- likelihood(false,true)*beliefs[i] + likelihood(false,false)*(1-beliefs[i]);
-			float result <- numerator1*incoming_information()/denominator1 + numerator2*(1-incoming_information())/denominator2;
+			float result <- (numerator1*incoming_information()/denominator1) + (numerator2*(1-incoming_information())/denominator2);
 			beliefs[i] <- result>=0?result:beliefs[i];
 		}	
 	}
@@ -269,7 +271,6 @@ species people skills:[escape_pedestrian] parallel:500{
 	reflex mobility when:target!=location and epidemic_status != "D"{
 		//Determine wether the agent implements health care recommendations.
 		float estimated_risk <- calculate_risk(); //Add here bayesian function?
-		do update_beliefs;
 		wear_mask <- beliefs[0]>(1-estimated_risk)?true:false;
 		hand_wash <- beliefs[1]>(1-estimated_risk)?true:false;
 		keep_distance <- beliefs[2]>(1-estimated_risk)?true:false;
@@ -352,7 +353,7 @@ species hospital{
 	block belongs_to;
 	
 	init {
-		belongs_to <- block(60);
+		belongs_to <- block(int(length(block)/2));
 		shape <- belongs_to.shape;
 		location <- belongs_to.location;
 		beds <- init_beds;
