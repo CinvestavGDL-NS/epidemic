@@ -44,8 +44,8 @@ global{
 	//Visualization parameters
 	//0.Susceptible (S), 1.Exposed (E), 2.Infectious with symptoms (Is), 3.Infectious without symptoms(Ia), 4.Recovered(R), 5.Immune(I).
 	//list<rgb> status_color <- [#yellow,#darkturquoise,#red,#magenta,#greenyellow,#gray, #skyblue,#green,#white];
-	map<string,int> status_size <- ["S"::5,"E"::5,"Is"::5,"Ia"::5,"R"::5,"I"::5];
-	map<string,rgb> status_color <- ["S"::#yellow,"E"::#gamaorange,"Is"::#red,"Ia"::#magenta,"R"::#greenyellow,"I"::#white, "Qs"::#red, "Qa"::#blueviolet,"H"::#skyblue ];
+	map<string,int> status_size <- ["S"::5,"E"::5,"Is"::5,"Ia"::5,"R"::5,"I"::5, "D"::5];
+	map<string,rgb> status_color <- ["S"::#yellow,"E"::#gamaorange,"Is"::#red,"Ia"::#magenta,"R"::#greenyellow,"I"::#white, "D"::rgb (179, 0, 0,255), "Qs"::#red, "Qa"::#blueviolet,"H"::#skyblue ];
 	
 	int nb_people <- 1500;
 	
@@ -56,9 +56,11 @@ global{
 	int nb_infectious_asymptomatic <- 0 update: length(people where(each.epidemic_status="Ia"));
 	int nb_recovered <- 0 update: length(people where(each.epidemic_status="R"));
 	int nb_immune <- 0 update: length(people where(each.epidemic_status="I"));
+	int nb_D <- 0 update: length(people where(each.epidemic_status="D"));
 	int nb_Qs <- 0 update: length(people where(each.Qs=true));
 	int nb_Qa <- 0 update: length(people where(each.Qa=true));
 	int nb_H <- 0 update: length(people where(each.H=true));
+	
 	int nb_mask <- 0 update: length(people where(each.wear_mask=true));
 	int nb_hand_wash <- 0 update: length(people where(each.hand_wash=true));
 	int nb_social_distance <- 0 update: length(people where(each.keep_distance=true));
@@ -264,7 +266,7 @@ species people skills:[escape_pedestrian] parallel:500{
 		}	
 	}
 		
-	reflex mobility when:target!=location{
+	reflex mobility when:target!=location and epidemic_status != "D"{
 		//Determine wether the agent implements health care recommendations.
 		float estimated_risk <- calculate_risk(); //Add here bayesian function?
 		do update_beliefs;
@@ -315,7 +317,7 @@ species people skills:[escape_pedestrian] parallel:500{
 		//Recovered
 		if epidemic_status = "R"{
 			if ((cycle-last_change)*step/86400)>t4_{
-				epidemic_status <- rnd(100)/100<lambda?"I":"S";
+				epidemic_status <- rnd(100)/100<lambda?"I":"D";
 				last_change <- cycle;
 				do update_behavior;
 			}
@@ -323,6 +325,10 @@ species people skills:[escape_pedestrian] parallel:500{
 		//Immune
 		if epidemic_status = "I"{
 			do update_behavior;
+		}
+		//Dead
+		if epidemic_status = "D"{
+			
 		}
 	}
 	action infect_encounter{
@@ -414,6 +420,7 @@ experiment simulation{
 				draw "Qs: "+nb_Qs at:{30#px,350#px} color:#white font: font("Arial", 20, #plain);
 				draw "Qa: "+nb_Qa at:{30#px,380#px} color:#white font: font("Arial", 20, #plain);
 				draw "H: "+nb_H at:{30#px,410#px} color:#white font: font("Arial", 20, #plain);
+				draw "D: "+nb_D at:{30#px,440#px} color:#white font: font("Arial", 20, #plain);
 			}
 			/*overlay position: { 10, 10 } size: { 0.1,0.1 } background: # black border: #black rounded: true{
                 float y <- 30#px;
@@ -437,6 +444,7 @@ experiment simulation{
 				data "Infectious Asymptomatic" value: nb_infectious_asymptomatic color: status_color["Ia"] marker: false style: line;
 				data "Recovered" value: nb_recovered color: status_color["R"] marker: false style: line;
 				data "Immune" value:nb_immune color:status_color["I"] marker:false style:line;
+				data "Deaths" value:nb_immune color:status_color["D"] marker:false style:line;
 			}
 		}
 		display chart_behavior background:#black type:java2D refresh:every(1#hour){
