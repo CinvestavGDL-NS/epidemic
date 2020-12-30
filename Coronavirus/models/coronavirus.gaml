@@ -47,7 +47,7 @@ global{
 	map<string,int> status_size <- ["S"::5,"E"::5,"Is"::5,"Ia"::5,"R"::5,"I"::5];
 	map<string,rgb> status_color <- ["S"::#yellow,"E"::#gamaorange,"Is"::#red,"Ia"::#magenta,"R"::#greenyellow,"I"::#white, "Qs"::#red, "Qa"::#blueviolet,"H"::#skyblue ];
 	
-	int nb_people <- 2000;
+	int nb_people <- 1500;
 	
 	//Output variables
 	int nb_susceptible <- nb_people-init_nb_exposed update: length(people where(each.epidemic_status="S"));
@@ -59,6 +59,12 @@ global{
 	int nb_Qs <- 0 update: length(people where(each.Qs=true));
 	int nb_Qa <- 0 update: length(people where(each.Qa=true));
 	int nb_H <- 0 update: length(people where(each.H=true));
+	int nb_mask <- 0 update: length(people where(each.wear_mask=true));
+	int nb_hand_wash <- 0 update: length(people where(each.hand_wash=true));
+	int nb_social_distance <- 0 update: length(people where(each.keep_distance=true));
+	
+	bool saveToCSV <- false;
+	list<string> output;
 	
 	//General model parameters
 	geometry shape <- envelope(roads_shp);
@@ -66,17 +72,26 @@ global{
 	map<road, float> weight_map;
 	init{
 		starting_date <- date("2020-02-28 00:00:00") ;
-		step <- 1#mn; 
+		step <- 2#mn; 
 		create road from:roads_shp;
 		create block from:blocks_shp;
-		create hospital{beds<- 100;intensive_care_beds<-10;}
+		create hospital{beds<- 30;intensive_care_beds<-10;}
 		weight_map <- road as_map(each::each.shape.perimeter);
 		road_network <- as_edge_graph(road) with_weights weight_map;
 		create people number:nb_people;
 		create people number:init_nb_exposed{epidemic_status<-"E"; last_change <- cycle;}
 	}
+	reflex save_results when:saveToCSV and every(24#hour){
+		string current <- ""+cycle+","+current_date+","+int(timeElapsed/86400)+","+nb_susceptible+","+nb_exposed+","
+		+nb_infectious_symptomatic+","+nb_infectious_asymptomatic+","+nb_recovered+","+nb_immune
+		+","+nb_Qs+","+nb_Qa+","+nb_H+","+nb_mask+","+nb_hand_wash+","+nb_social_distance;
+		save current to: "output.csv" type:csv rewrite:false;
+		
+	}
 }
-species people skills:[escape_pedestrian] parallel:100{
+
+
+species people skills:[escape_pedestrian] parallel:500{
 	
 	//Mobility
 	point target;
@@ -97,7 +112,7 @@ species people skills:[escape_pedestrian] parallel:100{
 	bool intensive_care;
 	
 	//Culture related variables
-	string cultural_orientation <- one_of(["individualist,collectivist"]);
+	string cultural_orientation <- one_of(["vertical_individualist","horizontal_individualist","vertical_collectivist","horizontal_collectivist"]);
 	
 	//Risk acceptability
 	float acceptable_risk;
@@ -112,7 +127,15 @@ species people skills:[escape_pedestrian] parallel:100{
 	bool Qa <- false; //Self-isolate at home even does not know about contageousness.
 	
 	//Interventions, policies, restrictions, etc. 
-	list<float> beliefs <- [0.5,0.5,0.5];
+	/*
+	 * Agents' beliefs:
+	 * 0. wear_mask
+	 * 1. hand_wash
+	 * 2. keep_distance
+	 * 3. go_out
+	 * 4. go_out_essentials
+	 * */
+	list<float> beliefs <- [0.5,0.5,0.5,0.5,0.5];
 	bool wear_mask;
 	bool hand_wash;
 	bool keep_distance;
@@ -209,22 +232,29 @@ species people skills:[escape_pedestrian] parallel:100{
 		return result;
 	}
 	
-	float likelihood(bool e, bool h){
+	float likelihood(bool f, bool b){
 		/*This may be a probability taken from the cultural orientation of the agent.
 		** 
 		**
 		*/
-		float result <- 0.0;
+		float result <- 0.5;
+		if cultural_orientation = "vertical_individualist"{result <- result + 0.0;}
+		if cultural_orientation = "horizontal_individualist"{result <- result + 0.17;}
+		if cultural_orientation = "vertical_collectivist"{result <- result + 0.33;}
+		if cultural_orientation = "horizontal_collectivist"{result <- result + 0.5;}
+		if !f and b{result <- 1-result;}
 		return result;
 	}
 	
 	float incoming_information{
 		float result <- 0.0;
-		return result;
+		result <- nb_infectious_symptomatic / length(people);
+		return 1-result;
 	}
 	
 	action update_beliefs{
-		loop i from: 0 to:length(beliefs){
+		write "update_beliefs("+name+")";
+		loop i from: 0 to:2{
 			float numerator1 <- likelihood(true,true)*beliefs[i];
 			float denominator1 <- likelihood(true,true)*beliefs[i] + likelihood(true,false)*(1-beliefs[i]);
 			float numerator2 <- likelihood(false,true)*beliefs[i];
@@ -237,9 +267,10 @@ species people skills:[escape_pedestrian] parallel:100{
 	reflex mobility when:target!=location{
 		//Determine wether the agent implements health care recommendations.
 		float estimated_risk <- calculate_risk(); //Add here bayesian function?
-		wear_mask <- estimated_risk>acceptable_risk?true:false;
-		hand_wash <- estimated_risk>acceptable_risk?true:false;
-		keep_distance <- estimated_risk>acceptable_risk?true:false;
+		do update_beliefs;
+		wear_mask <- beliefs[0]>(1-estimated_risk)?true:false;
+		hand_wash <- beliefs[1]>(1-estimated_risk)?true:false;
+		keep_distance <- beliefs[2]>(1-estimated_risk)?true:false;
 		do goto target:target on:road_network speed:speed;
 		/*
 		 * EXPERIMENTAL USING PEDESTRIAN OR ESCAPE_PEDESTRIAN SKILL
@@ -354,6 +385,10 @@ species block{
 	aspect default{draw shape color:rgb(50,50,50,0.5);}
 }
 
+experiment noGUI type:batch until:int(timeElapsed/86400)=180{
+	parameter 'saveToCSV' var:saveToCSV <- true;
+}
+
 experiment simulation{
 	output{
 		layout #split;
@@ -363,13 +398,22 @@ experiment simulation{
 			species hospital aspect:default refresh:false;
 			species road aspect:default refresh:false;
 			species people aspect:default;
-			overlay size: { 180 #px, 100 #px } {
+			overlay size: { 0 #px, 0 #px } {
 				draw "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.:0123456789" at: {0#px,0#px} color:rgb(0,0,0,0) font: font("Arial", 20, #plain);
-				draw ""+current_date at:{250#px,30#px} color:#white font: font("Arial", 20,#plain);
-				draw "Infections: "+int(nb_infectious_symptomatic+nb_infectious_asymptomatic) at:{30#px,400#px} color:#white font: font("Arial", 20, #plain);
-				draw "Qa: "+nb_Qa at:{30#px,430#px} color:#white font: font("Arial", 20, #plain);
-				draw "Qs: "+nb_Qs at:{30#px,460#px} color:#white font: font("Arial", 20, #plain);
-				draw "H: "+nb_H at:{30#px,490#px} color:#white font: font("Arial", 20, #plain);
+				draw ""+current_date at:{30#px,30#px} color:#white font: font("Arial", 20,#plain);
+				
+				draw "Mask: "+nb_mask at:{30#px,110#px} color:#white font: font("Arial", 20, #plain);
+				draw "H.Wash: "+nb_mask at:{30#px,140#px} color:#white font: font("Arial", 20, #plain);
+				draw "S.Distance: "+nb_mask at:{30#px,170#px} color:#white font: font("Arial", 20, #plain);
+				
+				draw "S: "+nb_susceptible at:{30#px,200#px} color:#white font: font("Arial", 20, #plain);
+				draw "E: "+nb_exposed at:{30#px,230#px} color:#white font: font("Arial", 20, #plain);
+				draw "Is: "+nb_infectious_symptomatic at:{30#px,260#px} color:#white font: font("Arial", 20, #plain);
+				draw "Ia: "+nb_infectious_asymptomatic at:{30#px,290#px} color:#white font: font("Arial", 20, #plain);
+				draw "R: "+nb_recovered at:{30#px,320#px} color:#white font: font("Arial", 20, #plain);
+				draw "Qs: "+nb_Qs at:{30#px,350#px} color:#white font: font("Arial", 20, #plain);
+				draw "Qa: "+nb_Qa at:{30#px,380#px} color:#white font: font("Arial", 20, #plain);
+				draw "H: "+nb_H at:{30#px,410#px} color:#white font: font("Arial", 20, #plain);
 			}
 			/*overlay position: { 10, 10 } size: { 0.1,0.1 } background: # black border: #black rounded: true{
                 float y <- 30#px;
@@ -381,7 +425,7 @@ experiment simulation{
             }*/
 		}
 		display chart_infections background:#black type:java2D refresh:every(1#hour){
-			overlay size: { 180 #px, 100 #px } {
+			overlay size: { 5 #px, 50 #px } {
 				draw ""+int(timeElapsed/86400)+" days, "+mod(int(timeElapsed/3600),24)+" hours" at:{150#px,30#px} color:#white font: font("Arial", 20,#plain);
 			}
 			chart "Global status" type: series legend_font:font("Arial",15,#bold) x_label: "Time" y_label:"People" style:ring background:#black color:#white label_font:font("Arial",15,#bold)  memorize:false title_font:font("Arial",15,#plain) title_visible:false{
@@ -396,7 +440,7 @@ experiment simulation{
 			}
 		}
 		display chart_behavior background:#black type:java2D refresh:every(1#hour){
-			overlay size: { 180 #px, 100 #px } {
+			overlay size: { 5 #px, 100 #px } {
 				draw ""+int(timeElapsed/86400)+" days, "+mod(int(timeElapsed/3600),24)+" hours" at:{150#px,30#px} color:#white font: font("Arial", 20,#plain);
 			}
 			chart "Global status" type: series legend_font:font("Arial",15,#bold) x_label: "Time" y_label:"People" style:ring background:#black color:#white label_font:font("Arial",15,#bold)  memorize:false title_font:font("Arial",15,#plain) title_visible:false{
