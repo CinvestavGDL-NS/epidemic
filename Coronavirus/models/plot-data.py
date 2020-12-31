@@ -10,6 +10,7 @@ nb_immune = []
 nb_Qs = []
 nb_Qa = []
 nb_H = []
+nb_D = []
 nb_mask = []
 nb_hand_wash = []
 nb_social_distance = []
@@ -28,9 +29,10 @@ with open('output.csv') as csv_file:
 			nb_Qs.append(int(row[9]))
 			nb_Qa.append(int(row[10]))
 			nb_H.append(int(row[11]))
-			nb_mask.append(int(row[12]))
-			nb_hand_wash.append(int(row[13]))
-			nb_social_distance.append(int(row[14]))
+			nb_D.append(int(row[12]))
+			nb_mask.append(int(row[13]))
+			nb_hand_wash.append(int(row[14]))
+			nb_social_distance.append(int(row[15]))
 		line_count+=1
 print(x)
 plt.plot(nb_susceptible,'y',label='Susceptible')

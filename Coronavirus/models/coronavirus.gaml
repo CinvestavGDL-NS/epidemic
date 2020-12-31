@@ -28,6 +28,15 @@ global{
 	int timeElapsed <- 0 update: int(cycle*step);
 	
 	//General virus behavior related parameters and variables
+	int nb_vertical_individualist <- 10;
+	int nb_vertical_collectivist <- 10;
+	int nb_horizontal_individualist <- 10;
+	int nb_horizontal_collectivist <- 10;
+	int nb_people <- nb_vertical_individualist+nb_vertical_collectivist+nb_horizontal_individualist+nb_horizontal_collectivist;
+	bool update_beliefs <- false;
+	bool mobility_restriction <- false;
+	bool saveToCSV <- false;
+	list<string> output;
 	int init_nb_exposed parameter:"init_nb_exposed" category:"Model parameters" <- 10 min:0 max:100; //Number of agents initially exposed to the virus S.
 	float beta parameter: "beta" category:"Model parameters" <- 0.01; //Probability of going from Susceptible to Exposed.
 	float rho parameter: "rho" category:"Model parameters" <- 0.86834 min:0.0 max:1.0; //Probability of having symptoms among infected individuals E->Is.
@@ -38,7 +47,7 @@ global{
 	float lambda parameter: "lambda" category:"Model parameters" <- 0.8 min:0.0 max:1.0; //Probability of return to susceptible class S once Recovered.
 	int init_beds parameter: "Beds in hospital" category:"Hospital" <- 100 min:0 max:2000;
 	int init_icbeds parameter: "Int. care beds" category:"Hospital" <- 20 min:0 max:2000; 
-	
+	int aux_parameter;
 	
 	
 	//Visualization parameters
@@ -46,8 +55,7 @@ global{
 	//list<rgb> status_color <- [#yellow,#darkturquoise,#red,#magenta,#greenyellow,#gray, #skyblue,#green,#white];
 	map<string,int> status_size <- ["S"::5,"E"::5,"Is"::5,"Ia"::5,"R"::5,"I"::5, "D"::5];
 	map<string,rgb> status_color <- ["S"::#yellow,"E"::#gamaorange,"Is"::#red,"Ia"::#magenta,"R"::#greenyellow,"I"::#white, "D"::rgb (179, 0, 0,255), "Qs"::#red, "Qa"::#blueviolet,"H"::#skyblue ];
-	
-	int nb_people <- 500;
+
 	
 	//Output variables
 	int nb_susceptible <- nb_people-init_nb_exposed update: length(people where(each.epidemic_status="S"));
@@ -65,9 +73,6 @@ global{
 	int nb_hand_wash <- 0 update: length(people where(each.hand_wash=true));
 	int nb_social_distance <- 0 update: length(people where(each.keep_distance=true));
 	
-	bool saveToCSV <- false;
-	list<string> output;
-	
 	//General model parameters
 	geometry shape <- envelope(roads_shp);
 	graph road_network;
@@ -80,15 +85,34 @@ global{
 		create hospital{beds<- 30;intensive_care_beds<-10;}
 		weight_map <- road as_map(each::each.shape.perimeter);
 		road_network <- as_edge_graph(road) with_weights weight_map;
-		create people number:nb_people;
-		create people number:init_nb_exposed{epidemic_status<-"E"; last_change <- cycle;}
+		create people number:nb_vertical_individualist{cultural_orientation<-"vertical_individualist";}
+		create people number:nb_vertical_collectivist{cultural_orientation<-"vertical_collectivist";}
+		create people number:nb_horizontal_individualist{cultural_orientation<-"horizontal_individualist";}
+		create people number:nb_horizontal_collectivist{cultural_orientation<-"horizontal_collectivist";}
+		//create people number:init_nb_exposed{epidemic_status<-"E"; last_change <- cycle;}
+		int jump <- int(nb_people/init_nb_exposed);
+		loop i from:0 to:init_nb_exposed-1{
+			ask people(i*jump){
+				epidemic_status<-"E"; last_change <- cycle;
+			}
+		}
 	}
 	reflex save_results when:saveToCSV and every(24#hour){
 		string current <- ""+cycle+","+current_date+","+int(timeElapsed/86400)+","+nb_susceptible+","+nb_exposed+","
 		+nb_infectious_symptomatic+","+nb_infectious_asymptomatic+","+nb_recovered+","+nb_immune
-		+","+nb_Qs+","+nb_Qa+","+nb_H+","+nb_mask+","+nb_hand_wash+","+nb_social_distance;
+		+","+nb_Qs+","+nb_Qa+","+nb_H+","+nb_D+","+nb_mask+","+nb_hand_wash+","+nb_social_distance+","+nb_people
+		+","+nb_vertical_individualist+","+nb_vertical_collectivist+","+nb_horizontal_individualist+","+nb_horizontal_collectivist;
 		save current to: "output.csv" type:csv rewrite:false;
-		
+		/*write ""+nb_infectious_symptomatic+","+nb_infectious_asymptomatic+","+nb_D+","+(nb_infectious_symptomatic+nb_infectious_asymptomatic+nb_D) / nb_people;
+		ask people(0){
+			write "people("+name+") beliefs:"+beliefs[0]+","+beliefs[1]+","+beliefs[2];
+		}	
+		ask people(9){
+			write "people("+name+") beliefs:"+beliefs[0]+","+beliefs[1]+","+beliefs[2];
+		}	
+		ask people(2){
+			write "people("+name+") beliefs:"+beliefs[0]+","+beliefs[1]+","+beliefs[2];
+		}	*/
 	}
 }
 
@@ -137,7 +161,7 @@ species people skills:[escape_pedestrian] parallel:500{
 	 * 3. go_out
 	 * 4. go_out_essentials
 	 * */
-	list<float> beliefs <- [0.5,0.5,0.5,0.5,0.5];
+	list<float> beliefs <- [0.01,0.01,0.01,0.01,0.01];
 	bool wear_mask;
 	bool hand_wash;
 	bool keep_distance;
@@ -187,6 +211,7 @@ species people skills:[escape_pedestrian] parallel:500{
 			Qs <- false;
 			Qa <- false;
 		}
+		
 	}
 	
 	reflex create_new_agenda when:empty(agenda_day){
@@ -195,16 +220,25 @@ species people skills:[escape_pedestrian] parallel:500{
 		int nb_activities;
 		int hours_per_activity;
 		int sum;
-		if essential_worker{//Essential worker, it is needed to go out and develop activities
+		if mobility_restriction{
+			if essential_worker{//Essential worker, it is needed to go out and develop activities
+				hours_for_activities <- rnd(2,8);
+				hour_for_go_out <- rnd(7,24-hours_for_activities);
+				nb_activities <- rnd(1,2);	
+			}
+			else{//Not essenial worker, just go out for needed activities like shopping supplies
+				hours_for_activities <- rnd(1,3);
+				hour_for_go_out <- rnd(9,20-hours_for_activities);
+				nb_activities <- 1;
+			}	
+		}
+		else{
 			hours_for_activities <- rnd(12,17);
 			hour_for_go_out <- rnd(0,24-hours_for_activities);
-			nb_activities <- rnd(2,7);	
+			nb_activities <- rnd(2,8);
 		}
-		else{//Not essenial worker, just go out for needed activities like shopping supplies
-			hours_for_activities <- rnd(1,3);
-			hour_for_go_out <- rnd(9,20-hours_for_activities);
-			nb_activities <- rnd(1,2);
-		}
+		
+		
 		
 		hours_per_activity <- int(hours_for_activities/nb_activities);
 		sum <- 0;
@@ -216,7 +250,6 @@ species people skills:[escape_pedestrian] parallel:500{
 	}
 	
 	reflex update_activity when:not empty(agenda_day) and (after(agenda_day.keys[0])){
-		do update_beliefs;
 		target <- agenda_day.values[0];
 		agenda_day>>first(agenda_day);
 		if Qa or Qs{
@@ -225,6 +258,14 @@ species people skills:[escape_pedestrian] parallel:500{
 		}
 		if H{
 			target <- any_location_in(hospital closest_to self);
+		}
+		//Determine wether the agent implements health care recommendations.
+		if update_beliefs{
+			float estimated_risk <- calculate_risk(); //Add here bayesian function?
+			do update_beliefs;
+			wear_mask <- beliefs[0]>rnd(100)/100?true:false;
+			hand_wash <- beliefs[1]>rnd(100)/100?true:false;
+			keep_distance <- beliefs[2]>rnd(100)/100?true:false;
 		}
 	}	
 	
@@ -235,7 +276,7 @@ species people skills:[escape_pedestrian] parallel:500{
 		return result;
 	}
 	
-	float likelihood(bool f, bool b){
+	float likelihood{
 		/*This may be a probability taken from the cultural orientation of the agent.
 		** 
 		**
@@ -245,35 +286,38 @@ species people skills:[escape_pedestrian] parallel:500{
 		if cultural_orientation = "horizontal_individualist"{result <- result + 0.17;}
 		if cultural_orientation = "vertical_collectivist"{result <- result + 0.33;}
 		if cultural_orientation = "horizontal_collectivist"{result <- result + 0.5;}
-		result <- 1.0;
-		if (!f and b) or (f and !b){result <- 1-result;}
-		return 1-result;
+		return result;
 	}
 	
 	float incoming_information{
 		float result <- 0.0;
-		result <- nb_exposed+nb_infectious_symptomatic+nb_infectious_asymptomatic+nb_D+nb_H+nb_Qs+nb_Qa / length(people);
+		result <- (nb_infectious_symptomatic+nb_infectious_asymptomatic+nb_D) / nb_people;
+		//result <- aux_parameter / nb_people;
 		return result;
 	}
 	
 	action update_beliefs{
-		//write "update_beliefs("+name+")";
 		loop i from: 0 to:2{
-			float numerator1 <- likelihood(true,true)*beliefs[i];
-			float denominator1 <- likelihood(true,true)*beliefs[i] + likelihood(true,false)*(1-beliefs[i]);
-			float numerator2 <- likelihood(false,true)*beliefs[i];
-			float denominator2 <- likelihood(false,true)*beliefs[i] + likelihood(false,false)*(1-beliefs[i]);
-			float result <- (numerator1*incoming_information()/denominator1) + (numerator2*(1-incoming_information())/denominator2);
-			beliefs[i] <- result>=0?result:beliefs[i];
+			float numerator1 <- likelihood()*beliefs[i];
+			float denominator1 <- likelihood()*beliefs[i] + (1-likelihood())*(1-beliefs[i]);
+			float numerator2 <- (1-likelihood())*beliefs[i];
+			float denominator2 <- (1-likelihood())*beliefs[i] + likelihood()*(1-beliefs[i]);
+			try{
+				float result <- (numerator1*incoming_information()/denominator1) + (numerator2*(1-incoming_information())/denominator2);
+				beliefs[i] <- result=0?0.001:result;
+				beliefs[i] <- beliefs[i]=1.0?0.999:beliefs[i];
+			}catch{
+				write "agent("+name+") division1: "+numerator1*incoming_information()+"/"+denominator1+"\tdivision2: "+numerator2*(1-incoming_information())+"/"+denominator2
+				+"\n" +"likelihood: "+likelihood()+ ", beliefs["+i+"]:"+beliefs[i];
+			}
+			/*write "agent("+name+") division1: "+numerator1*incoming_information()+"/"+denominator1+"\tdivision2: "+numerator2*(1-incoming_information())+"/"+denominator2
+				+"\n" +"likelihood: "+likelihood()+ ", beliefs["+i+"]:"+beliefs[i];*/
 		}	
+		//write "beliefs: "+beliefs[0]+","+beliefs[1]+","+beliefs[2];
 	}
 		
 	reflex mobility when:target!=location and epidemic_status != "D"{
-		//Determine wether the agent implements health care recommendations.
-		float estimated_risk <- calculate_risk(); //Add here bayesian function?
-		wear_mask <- beliefs[0]>(1-estimated_risk)?true:false;
-		hand_wash <- beliefs[1]>(1-estimated_risk)?true:false;
-		keep_distance <- beliefs[2]>(1-estimated_risk)?true:false;
+		
 		do goto target:target on:road_network speed:speed;
 		/*
 		 * EXPERIMENTAL USING PEDESTRIAN OR ESCAPE_PEDESTRIAN SKILL
@@ -318,7 +362,7 @@ species people skills:[escape_pedestrian] parallel:500{
 		//Recovered
 		if epidemic_status = "R"{
 			if ((cycle-last_change)*step/86400)>t4_{
-				epidemic_status <- rnd(100)/100<lambda?"I":"D";
+				epidemic_status <- rnd(100)/100<lambda?"D":"I";
 				last_change <- cycle;
 				do update_behavior;
 			}
@@ -337,8 +381,10 @@ species people skills:[escape_pedestrian] parallel:500{
 			list<people> near_people <- people at_distance(2);//To do: as a parameter
 			if near_people != nil{
 				loop contact over:near_people{
-					ask contact{
-						if rnd(100)/100 < beta and epidemic_status = "S" {epidemic_status <- "E";last_change <- cycle;}
+					if not wear_mask{
+						ask contact{
+							if rnd(100)/100 < beta and epidemic_status = "S" {epidemic_status <- "E";last_change <- cycle;}
+						}	
 					}
 				}
 			}	
@@ -392,9 +438,29 @@ species block{
 	aspect default{draw shape color:rgb(50,50,50,0.5);}
 }
 
-experiment noGUI type:batch until:int(timeElapsed/86400)=180{
+experiment scenario1_no_intervention type:batch until:int(timeElapsed/86400)=180{
+	parameter 'update_beliefs' var:update_beliefs <- false;
 	parameter 'saveToCSV' var:saveToCSV <- true;
+	parameter 'mobility_restriction' var:mobility_restriction <- false;
+	parameter 'vert_indiv' var:nb_vertical_individualist <- 100;
+	parameter 'vert_collect' var:nb_vertical_collectivist <- 100;
+	parameter 'hor_indiv' var:nb_horizontal_individualist <- 100;
+	parameter 'hor_collect' var:nb_horizontal_collectivist <- 100;
+	parameter 'nb_init_exposed' var:init_nb_exposed <- 10;	
 }
+
+experiment scenario2_no_intervention_beliefs type:batch until:int(timeElapsed/86400)=180{
+	parameter 'update_beliefs' var:update_beliefs <- true;
+	parameter 'saveToCSV' var:saveToCSV <- true;
+	parameter 'mobility_restriction' var:mobility_restriction <- false;
+	parameter 'vert_indiv' var:nb_vertical_individualist <- 100;
+	parameter 'vert_collect' var:nb_vertical_collectivist <- 100;
+	parameter 'hor_indiv' var:nb_horizontal_individualist <- 100;
+	parameter 'hor_collect' var:nb_horizontal_collectivist <- 100;
+	parameter 'nb_init_exposed' var:init_nb_exposed <- 10;	
+	parameter 'aux' var:aux_parameter <-0 min:0 max:400;
+}
+
 
 experiment simulation{
 	output{
