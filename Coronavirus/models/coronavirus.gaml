@@ -461,6 +461,40 @@ experiment scenario2_no_intervention_beliefs type:batch until:int(timeElapsed/86
 	parameter 'aux' var:aux_parameter <-0 min:0 max:400;
 }
 
+experiment scenario3_intervention_beliefs type:batch until:int(timeElapsed/86400)=180{
+	parameter 'update_beliefs' var:update_beliefs <- true;
+	parameter 'saveToCSV' var:saveToCSV <- true;
+	parameter 'mobility_restriction' var:mobility_restriction <- true;
+	parameter 'vert_indiv' var:nb_vertical_individualist <- 100;
+	parameter 'vert_collect' var:nb_vertical_collectivist <- 100;
+	parameter 'hor_indiv' var:nb_horizontal_individualist <- 100;
+	parameter 'hor_collect' var:nb_horizontal_collectivist <- 100;
+	parameter 'nb_init_exposed' var:init_nb_exposed <- 10;	
+	parameter 'aux' var:aux_parameter <-0 min:0 max:400;	
+}
+
+experiment scenario4_intervention_beliefs type:batch until:int(timeElapsed/86400)=180{
+	parameter 'update_beliefs' var:update_beliefs <- true;
+	parameter 'saveToCSV' var:saveToCSV <- true;
+	parameter 'mobility_restriction' var:mobility_restriction <- false;
+	parameter 'vert_indiv' var:nb_vertical_individualist <- 397;
+	parameter 'vert_collect' var:nb_vertical_collectivist <- 1;
+	parameter 'hor_indiv' var:nb_horizontal_individualist <- 1;
+	parameter 'hor_collect' var:nb_horizontal_collectivist <- 1;
+	parameter 'nb_init_exposed' var:init_nb_exposed <- 10;	
+	parameter 'aux' var:aux_parameter <-0 min:0 max:400;	
+}
+experiment scenario5_intervention_beliefs type:batch until:int(timeElapsed/86400)=180{
+	parameter 'update_beliefs' var:update_beliefs <- true;
+	parameter 'saveToCSV' var:saveToCSV <- true;
+	parameter 'mobility_restriction' var:mobility_restriction <- false;
+	parameter 'vert_indiv' var:nb_vertical_individualist <- 1;
+	parameter 'vert_collect' var:nb_vertical_collectivist <- 1;
+	parameter 'hor_indiv' var:nb_horizontal_individualist <- 1;
+	parameter 'hor_collect' var:nb_horizontal_collectivist <- 397;
+	parameter 'nb_init_exposed' var:init_nb_exposed <- 10;	
+	parameter 'aux' var:aux_parameter <-0 min:0 max:400;	
+}
 
 experiment simulation{
 	output{
