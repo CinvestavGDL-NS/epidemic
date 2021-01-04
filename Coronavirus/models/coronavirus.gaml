@@ -497,11 +497,21 @@ experiment scenario5_intervention_beliefs type:batch until:int(timeElapsed/86400
 }
 
 experiment simulation{
+	parameter 'update_beliefs' var:update_beliefs <- true;
+	parameter 'saveToCSV' var:saveToCSV <- false;
+	parameter 'mobility_restriction' var:mobility_restriction <- true;
+	parameter 'vert_indiv' var:nb_vertical_individualist <- 100;
+	parameter 'vert_collect' var:nb_vertical_collectivist <- 100;
+	parameter 'hor_indiv' var:nb_horizontal_individualist <- 100;
+	parameter 'hor_collect' var:nb_horizontal_collectivist <- 100;
+	parameter 'nb_init_exposed' var:init_nb_exposed <- 10;	
+	parameter 'aux' var:aux_parameter <-0 min:0 max:400;	
 	output{
 		layout #split;
 		display main background:#black type:opengl draw_env:false{
 			//image "background" file:"../includes/img/img_file.jpg";
 			//species block aspect:default;
+			
 			species hospital aspect:default refresh:false;
 			species road aspect:default refresh:false;
 			species people aspect:default;
