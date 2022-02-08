@@ -1,5 +1,6 @@
 # An agent-based model of the dual causality between individual and collective behaviors in an epidemic
 Authors: Gamaliel Palomo, Mario Siller, Arnaud Grignard.
+
 This repository contains the implementation described in the article "An agent-based model of the dual causality between individual and collective behaviors in an epidemic".
 https://www.sciencedirect.com/science/article/pii/S0010482521007897
 
