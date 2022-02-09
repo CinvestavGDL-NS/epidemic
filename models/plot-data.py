@@ -14,7 +14,7 @@ nb_D = []
 nb_mask = []
 nb_hand_wash = []
 nb_social_distance = []
-with open('output.csv') as csv_file:
+with open('12310400_400.csv') as csv_file:
 	csv_reader = csv.reader(csv_file,delimiter=',')
 	line_count = 0
 	for row in csv_reader:

@@ -16,7 +16,7 @@ nb_D = []
 nb_mask = []
 nb_hand_wash = []
 nb_social_distance = []
-with open('output.csv') as csv_file:
+with open('12310400_400.csv') as csv_file:
 	csv_reader = csv.reader(csv_file,delimiter=',')
 	line_count = 0
 	for row in csv_reader:
@@ -49,13 +49,11 @@ axs[0].legend()
 axs[0].set_title('Epidemiologic states')
 
 
-
 axs[1].plot(nb_Qs,'brown',label="Qs")
 axs[1].plot(nb_Qa,'blueviolet',label='Qa')
 axs[1].plot(nb_H,'skyblue',label='H')
 axs[1].legend()
 axs[1].set_title('Behavioral states')
-
 
 axs[2].plot(nb_mask, 'blue',label="wear mask")
 axs[2].plot(nb_hand_wash, 'maroon',label="hand wash")
@@ -73,3 +71,11 @@ for ax in axs.flat:
     ax.label_outer()
 
 plt.show()
+
+mask_arr = np.array(nb_mask)
+hand_arr = np.array(nb_hand_wash)
+dist_arr = np.array(nb_social_distance)
+
+print ("Cubrebocas: {}".format(mask_arr.std()))
+print ("Hand wash: {}".format(hand_arr.std()))
+print ("Social Distance: {}".format(dist_arr.std()))
